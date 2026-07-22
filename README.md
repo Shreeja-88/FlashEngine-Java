@@ -1,111 +1,124 @@
-# FlashEngine: High-Concurrency Flash Sale Processing System
+# FlashEngine
 
-## Executive Summary
+## High-Concurrency Flash Sale Processing System
 
-**FlashEngine** is a zero-dependency, lightweight, high-throughput in-memory flash sale processing engine built using **Core Java (JDK 17)**. The system simulates high-concurrency e-commerce events where hundreds of concurrent threads compete for limited stock. By utilizing non-blocking atomic operations, real-time rate limiting, and an embedded custom web server, FlashEngine guarantees zero inventory overselling and sub-millisecond transaction processing.
-
----
-## Live High-Concurrency Demo
-
-![FlashEngine Live Simulation](assets/flashengine-demo.gif)
+FlashEngine is a lightweight, high-throughput flash sale processing engine built using Core Java. It simulates real-world e-commerce flash sale events where multiple concurrent users compete for limited inventory. The system leverages Java concurrency primitives to ensure thread safety, prevent overselling, eliminate duplicate purchases, and provide real-time analytics through an embedded HTTP server.
 
 ---
 
-## System Architecture & Design Principles
+## Features
 
+- Lock-free inventory management using `AtomicInteger`
+- Supports concurrent purchase processing
+- Duplicate purchase prevention
+- Token bucket rate limiting
+- Real-time transaction analytics
+- Embedded HTTP server with interactive dashboard
+- Zero external dependencies
+
+---
+
+## Demo
+
+![FlashEngine Demo](assets/flashengine-demo.gif)
+
+---
+
+## System Architecture
+
+```text
+                    Concurrent Client Requests
+                              │
+                              ▼
+                  Token Bucket Rate Limiter
+                              │
+                              ▼
+               Lock-Free Inventory Allocation
+             (AtomicInteger Compare-And-Swap)
+                              │
+                              ▼
+               Duplicate Purchase Prevention
+                (ConcurrentHashMap Key Set)
+                              │
+                              ▼
+                 Analytics & Metrics Engine
+             (Java Streams + System.nanoTime)
+                              │
+                              ▼
+                 Embedded HTTP Server Dashboard
 ```
-                       [ 100 Concurrent Threads ]
-                                   │
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                       Token Bucket Rate Limiter                     │
-│               (Caps traffic to 3 req/sec per user)                   │
-└──────────────────────────────────┬──────────────────────────────────┘
-                                   │
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Lock-Free Stock Allocator                        │
-│             (AtomicInteger CAS Operations - No Deadlocks)           │
-└──────────────────────────────────┬──────────────────────────────────┘
-                                   │
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                   Concurrent Duplicate Guard                        │
-│           (ConcurrentHashMap KeySet - Prevents Double Orders)       │
-└──────────────────────────────────┬──────────────────────────────────┘
-                                   │
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                   Java Stream Analytics Engine                      │
-│        (Calculates Min/Max/Avg Latency & Revenue via System.nanoTime)│
-└──────────────────────────────────┬──────────────────────────────────┘
-                                   │
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                 Embedded HTTP Server & Visual Dashboard             │
-│            (com.sun.net.httpserver.HttpServer / Custom UI)          │
-└─────────────────────────────────────────────────────────────────────┘
 
+---
+
+## Technologies Used
+
+| Component | Technology |
+|-----------|------------|
+| Language | Java 17+ |
+| Concurrency | AtomicInteger, ConcurrentHashMap, ExecutorService, CountDownLatch |
+| Analytics | Java Stream API |
+| Networking | com.sun.net.httpserver.HttpServer |
+| Frontend | HTML, CSS, JavaScript |
+| Dependencies | None |
+
+---
+
+## Project Structure
+
+```text
+FlashEngine-Java/
+│
+├── Main.java
+├── WebServer.java
+├── FlashSaleService.java
+├── Product.java
+├── PurchaseRecord.java
+├── PurchaseResult.java
+├── RateLimiter.java
+├── SaleAnalytics.java
+├── DuplicatePurchaseException.java
+├── OutOfStockException.java
+├── RateLimitExceededException.java
+├── README.md
+├── LICENSE
+└── assets/
+    └── flashengine-demo.gif
 ```
 
 ---
 
-## Key Engineering Modules
+## Core Components
 
-### 1. Lock-Free Inventory Management (CAS)
+### Lock-Free Inventory Management
 
-* **Problem:** Traditional synchronized blocks or relational database locks create execution bottlenecks and thread starvation under heavy load.
-* **Solution:** FlashEngine leverages **Compare-And-Swap (CAS)** primitives provided by `java.util.concurrent.atomic.AtomicInteger`. Stock deduction happens in a non-blocking loop, guaranteeing **atomic safety** and **0% overselling** without locking threads.
+Inventory updates are performed using `AtomicInteger` and Compare-And-Swap (CAS) operations, ensuring thread-safe stock allocation without explicit locks.
 
-### 2. Token Bucket Rate Limiter
+### Rate Limiting
 
-* **Problem:** Automated bots and user spam can overload system resources and block legitimate buyers.
-* **Solution:** A custom, thread-safe `RateLimiter` class tracks request frequency using `ConcurrentHashMap`. Requests exceeding **3 requests per second per user** are immediately rejected with a `RATE_LIMITED` status.
+A token bucket rate limiter restricts each user to a fixed number of requests per second, protecting the system from excessive traffic.
 
-### 3. Duplicate Transaction Prevention
+### Duplicate Purchase Prevention
 
-* **Problem:** Network retries or rapid double-clicking can cause duplicate purchases for a single account.
-* **Solution:** Utilizes `ConcurrentHashMap.newKeySet()` to store processed `userId`s atomically. Subsequent attempts by the same ID within the sale window throw a custom `DuplicatePurchaseException`.
+A thread-safe `ConcurrentHashMap.newKeySet()` is used to ensure that each user can complete only one successful purchase during a flash sale.
 
-### 4. Nanosecond Metric Pipeline & Stream Analytics
+### Analytics Engine
 
-* **Problem:** High-performance systems require fine-grained visibility into system latency and financial metrics.
-* **Solution:** Each transaction captures execution durations using `System.nanoTime()`. Upon sale completion, the **Java Stream API** (`DoubleSummaryStatistics`) aggregates:
-* Minimum, Maximum, and Average Execution Latency (ms)
-* Total Revenue Generated
-* Distribution of Success vs. Failure Badges
+Execution metrics are collected using `System.nanoTime()` and aggregated using the Java Stream API to calculate:
 
+- Total successful purchases
+- Failed transactions
+- Average latency
+- Minimum latency
+- Maximum latency
+- Total revenue
 
+### Embedded HTTP Server
 
-### 5. Native HTTP Server & Visual Web Dashboard
-
-* **Problem:** Relying on external web frameworks (e.g., Spring Boot) introduces heavy dependencies and startup overhead.
-* **Solution:** Built using JDK’s `com.sun.net.httpserver.HttpServer`. It serves RESTful API responses (`/api/sale`), static SVG assets (`/flashengine.svg`), and an interactive dark-themed web dashboard with live inventory progress bars and real-time transaction feeds.
+The application includes a lightweight web server built using `com.sun.net.httpserver.HttpServer` that serves an interactive dashboard and REST endpoints.
 
 ---
 
-## Technical Specifications & Tech Stack
-
-| Component | Technology / Implementation |
-| --- | --- |
-| **Language** | Java 17 (Core JDK Standard Library) |
-| **Concurrency Core** | `AtomicInteger`, `ConcurrentHashMap`, `ExecutorService`, `CountDownLatch` |
-| **Data Aggregation** | Java Stream API (`summaryStatistics`, `mapToDouble`) |
-| **Networking & HTTP** | `com.sun.net.httpserver.HttpServer` |
-| **Frontend UI** | HTML5, CSS3 (Custom Twilight Palette), Vanilla JavaScript (`Fetch API`) |
-| **Dependencies** | **0 External Libraries / Frameworks** |
-
----
-
-## Performance & Test Simulation Parameters
-
-* **Total Concurrent Threads:** `100`
-* **Total Available Stock:** `10 items`
-* **Item Unit Price:** `$499.99`
-* **Rate Limit Ceiling:** `3 requests / second / user`
-* **Execution Hardware:** Multithreaded JVM Environment
-
-### Sample System Execution Analytics Output
+## Sample Analytics Output
 
 ```json
 {
@@ -120,32 +133,75 @@
     "maxLatencyMs": 1.840
   }
 }
-
 ```
 
 ---
 
-## How to Run the Project
+## Performance Configuration
 
-1. **Clone & Navigate to the Directory:**
+| Parameter | Value |
+|-----------|------:|
+| Concurrent Threads | 100 |
+| Initial Stock | 10 Items |
+| Product Price | $499.99 |
+| Rate Limit | 3 Requests/Second/User |
+| Inventory Overselling | Prevented |
+
+---
+
+## How to Run
+
+### Prerequisites
+
+- Java 17 or later
+- Git
+
+### Clone the Repository
+
 ```bash
-cd FlashEngine
-
+git clone https://github.com/Shreeja-88/FlashEngine-Java.git
+cd FlashEngine-Java
 ```
 
-2. **Compile All Java Files:**
-```bash
-javac *.FlashEngine-Java
+### Compile
 
+```bash
+javac *.java
 ```
 
-3. **Start the Web Server:**
+### Run the Web Server
+
 ```bash
 java WebServer
-
 ```
 
-4. **Access the Dashboard:**
-Open your browser and navigate to `http://localhost:8080/` to launch the interactive dashboard and trigger the multithreaded simulation.
+or run the simulation directly
+
+```bash
+java Main
+```
+
+### Open the Dashboard
+
+```
+http://localhost:8080
+```
 
 ---
+
+## Java Concepts Demonstrated
+
+- Multithreading
+- ExecutorService
+- Atomic Operations
+- Compare-And-Swap (CAS)
+- ConcurrentHashMap
+- CountDownLatch
+- Java Stream API
+- Custom Exceptions
+- Embedded HTTP Server
+- RESTful API Design
+- Thread-Safe Programming
+
+---
+
